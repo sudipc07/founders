@@ -42,6 +42,11 @@
         <input type="text" id="upload-caption" placeholder="Describe this illustration…" />
       </div>
 
+      <div class="form-group">
+        <label>Write-up <span style="font-weight:300;text-transform:none">(optional)</span></label>
+        <textarea id="upload-notes" placeholder="Add context or notes about this illustration…" style="min-height:90px"></textarea>
+      </div>
+
       <button class="btn btn-primary" id="upload-btn" onclick="uploadImage()">Upload</button>
       <div class="progress-bar-wrap" id="progress-wrap">
         <div class="progress-bar" id="progress-bar" style="width:0%"></div>
@@ -102,23 +107,38 @@
         return
       }
 
-      let html = '<div class="admin-image-list">'
+      let html = ''
       for (const img of images) {
         const { data: urlData } = supabaseClient.storage
           .from('illustrations')
           .getPublicUrl(img.storage_path)
         html += `
-          <div class="admin-image-item" id="admin-img-${img.id}">
+          <div class="image-card" id="admin-img-${img.id}" style="margin-bottom:20px">
             <img src="${urlData.publicUrl}" alt="" />
-            <div class="admin-image-item-footer">
-              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${img.caption || 'No caption'}</span>
-              <button class="btn-delete" onclick="deleteAdminImage('${img.id}', '${img.storage_path}')" title="Delete">×</button>
+            <div class="image-card-footer">
+              <div style="display:flex;align-items:center;gap:8px;flex:1">
+                <input class="caption-edit-input" data-id="${img.id}" value="${img.caption || ''}" placeholder="Add caption…" />
+                <button class="btn btn-secondary btn-save-title" onclick="saveAdminMeta('${img.id}', this)" style="font-size:13px;padding:5px 12px">Save</button>
+                <button class="btn-delete" onclick="deleteAdminImage('${img.id}', '${img.storage_path}')" title="Delete">×</button>
+              </div>
+            </div>
+            <div style="padding:0 18px 16px">
+              <textarea data-notes-id="${img.id}" placeholder="Add a write-up about this illustration…" style="width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:4px;font-family:'Source Sans 3',sans-serif;font-size:14px;color:var(--ink);resize:vertical;min-height:90px;outline:none">${img.notes || ''}</textarea>
             </div>
           </div>
         `
       }
-      html += '</div>'
       container.innerHTML = html
+    }
+
+    async function saveAdminMeta(imageId, btn) {
+      const caption = document.querySelector(`input[data-id="${imageId}"]`).value.trim()
+      const notes = document.querySelector(`textarea[data-notes-id="${imageId}"]`).value.trim()
+      btn.textContent = 'Saving…'
+      btn.disabled = true
+      await supabaseClient.from('images').update({ caption, notes }).eq('id', imageId)
+      btn.textContent = 'Saved'
+      setTimeout(() => { btn.textContent = 'Save'; btn.disabled = false }, 1500)
     }
 
     async function deleteAdminImage(imageId, storagePath) {
@@ -165,6 +185,7 @@
       const chapterId = select.value
       const chapterNumber = select.options[select.selectedIndex].dataset.number
       const caption = document.getElementById('upload-caption').value.trim()
+      const notes = document.getElementById('upload-notes').value.trim()
 
       const ext = selectedFile.name.split('.').pop()
       const filename = `${Date.now()}.${ext}`
@@ -198,6 +219,7 @@
         filename,
         storage_path: storagePath,
         caption: caption || null,
+        notes: notes || null,
         sort_order: Date.now()
       })
 
@@ -208,6 +230,7 @@
       } else {
         document.getElementById('upload-success').classList.add('visible')
         document.getElementById('upload-caption').value = ''
+        document.getElementById('upload-notes').value = ''
         document.getElementById('upload-preview').innerHTML = ''
         selectedFile = null
         fileInput.value = ''
