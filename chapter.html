@@ -203,12 +203,18 @@
 
       renderSidebar()
 
-      // Open chapter from URL if provided
+      // Select first available image by default (or chapter from URL)
       const params = new URLSearchParams(window.location.search)
       const chId = params.get('id')
-      if (chId) {
-        const ch = allChapters.find(c => c.id === chId)
-        if (ch) expandChapter(chId)
+
+      const startChapter = chId
+        ? allChapters.find(c => c.id === chId)
+        : allChapters.find(c => allImages[c.id]?.length > 0)
+
+      if (startChapter) {
+        expandChapter(startChapter.id)
+        const firstImg = allImages[startChapter.id]?.[0]
+        if (firstImg) selectImage(firstImg.id, startChapter.id)
       }
     }
 
