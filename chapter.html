@@ -5,6 +5,121 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Chapter — Future Founders</title>
   <link rel="stylesheet" href="style.css" />
+  <style>
+    .chapter-layout {
+      display: flex;
+      gap: 0;
+      min-height: calc(100vh - 60px);
+    }
+
+    .thumb-sidebar {
+      width: 200px;
+      flex-shrink: 0;
+      border-right: 1px solid var(--border);
+      background: var(--surface);
+      position: sticky;
+      top: 60px;
+      height: calc(100vh - 60px);
+      overflow-y: auto;
+      padding: 16px 12px;
+    }
+
+    .thumb-sidebar-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--ink-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      margin-bottom: 12px;
+      padding: 0 4px;
+    }
+
+    .thumb-item {
+      cursor: pointer;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 8px;
+      border: 2px solid transparent;
+      transition: border-color 0.15s;
+    }
+
+    .thumb-item:hover {
+      border-color: var(--border);
+    }
+
+    .thumb-item.active {
+      border-color: var(--accent);
+    }
+
+    .thumb-item img {
+      width: 100%;
+      aspect-ratio: 16/9;
+      object-fit: cover;
+      display: block;
+    }
+
+    .thumb-item-num {
+      font-size: 11px;
+      color: var(--ink-muted);
+      padding: 4px 6px;
+      background: var(--bg);
+    }
+
+    .chapter-main {
+      flex: 1;
+      min-width: 0;
+      padding: 32px 40px;
+    }
+
+    .main-image-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      margin-bottom: 24px;
+    }
+
+    .main-image-wrap img {
+      width: 100%;
+      display: block;
+    }
+
+    .main-image-footer {
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .no-images-msg {
+      color: var(--ink-muted);
+      font-size: 15px;
+      padding: 40px;
+      text-align: center;
+      background: var(--surface);
+      border: 1px dashed var(--border);
+      border-radius: 6px;
+    }
+
+    @media (max-width: 700px) {
+      .chapter-layout { flex-direction: column; }
+      .thumb-sidebar {
+        width: 100%;
+        height: auto;
+        position: static;
+        display: flex;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        overflow-y: hidden;
+        gap: 8px;
+        padding: 12px;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+      }
+      .thumb-item { flex-shrink: 0; width: 100px; margin-bottom: 0; }
+      .chapter-main { padding: 20px; }
+    }
+  </style>
 </head>
 <body>
   <nav class="nav">
@@ -17,15 +132,20 @@
     </div>
   </nav>
 
-  <div class="container">
-    <a href="/chapters.html" class="back-link">← Back to chapters</a>
-
-    <div id="chapter-header">
-      <div class="loading">Loading…</div>
+  <div class="chapter-layout">
+    <!-- Left thumbnail sidebar -->
+    <div class="thumb-sidebar" id="thumb-sidebar">
+      <div class="thumb-sidebar-title">Illustrations</div>
+      <div id="thumb-list"></div>
     </div>
 
-    <div id="images-section"></div>
-    <div id="comments-section"></div>
+    <!-- Main content -->
+    <div class="chapter-main">
+      <a href="/chapters.html" class="back-link">← Back to chapters</a>
+      <div id="chapter-header"><div class="loading">Loading…</div></div>
+      <div id="main-image-area"></div>
+      <div id="comments-section"></div>
+    </div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -40,22 +160,19 @@
     const chapterId = params.get('id')
     if (!chapterId) window.location.href = '/chapters.html'
 
-    let chapterData = null
+    let allImages = []
+    let currentIndex = 0
 
     async function loadChapter() {
       const { data: ch } = await supabaseClient
-        .from('chapters')
-        .select('*')
-        .eq('id', chapterId)
-        .single()
+        .from('chapters').select('*').eq('id', chapterId).single()
 
       if (!ch) { window.location.href = '/chapters.html'; return }
-      chapterData = ch
 
       document.title = `${ch.title} — Future Founders`
       document.getElementById('chapter-header').innerHTML = `
-        <h1 class="chapter-title">${ch.title}</h1>
-        <p class="chapter-subtitle">Chapter ${ch.number}</p>
+        <h1 class="chapter-title" style="margin-bottom:4px">${ch.title}</h1>
+        <p class="chapter-subtitle" style="margin-bottom:28px">Chapter ${ch.number}</p>
       `
 
       await loadImages()
@@ -64,81 +181,104 @@
 
     async function loadImages() {
       const { data: images } = await supabaseClient
-        .from('images')
-        .select('*')
-        .eq('chapter_id', chapterId)
-        .order('sort_order')
+        .from('images').select('*').eq('chapter_id', chapterId).order('sort_order')
 
-      const section = document.getElementById('images-section')
+      allImages = images || []
 
-      if (!images || images.length === 0) {
-        section.innerHTML = `
-          <h2 class="images-section" style="font-size:20px;margin-bottom:20px;padding-bottom:10px;border-bottom:1px solid var(--border)">Illustrations</h2>
-          <div class="no-images">No illustrations uploaded yet for this chapter.</div>
-        `
+      const thumbList = document.getElementById('thumb-list')
+
+      if (allImages.length === 0) {
+        thumbList.innerHTML = '<p style="font-size:12px;color:var(--ink-muted)">No images yet.</p>'
+        document.getElementById('main-image-area').innerHTML =
+          '<div class="no-images-msg">No illustrations uploaded yet for this chapter.</div>'
         return
       }
 
-      let html = `<div class="images-section"><h2 style="font-size:20px;margin-bottom:20px;padding-bottom:10px;border-bottom:1px solid var(--border)">Illustrations</h2>`
-
-      for (const img of images) {
-        const { data: urlData } = supabaseClient.storage
-          .from('illustrations')
-          .getPublicUrl(img.storage_path)
-
-        const adminControls = role === 'admin' ? `
-          <div style="display:flex;align-items:center;gap:8px;flex:1">
-            <input class="caption-edit-input" data-id="${img.id}" value="${img.caption || ''}" placeholder="Add caption…" />
-            <button class="btn btn-secondary btn-save-title" onclick="saveImageMeta('${img.id}', this)" style="font-size:13px;padding:5px 12px">Save</button>
-            <button class="btn-delete" onclick="deleteImage('${img.id}', this)" title="Delete image">×</button>
-          </div>
-        ` : `<span class="image-caption">${img.caption || ''}</span>`
-
-        const notesBlock = role === 'admin' ? `
-          <div style="padding:0 18px 16px">
-            <textarea class="notes-edit-input" data-id="${img.id}" placeholder="Add a write-up about this illustration…" style="width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:4px;font-family:'Source Sans 3',sans-serif;font-size:14px;color:var(--ink);resize:vertical;min-height:90px;outline:none">${img.notes || ''}</textarea>
-          </div>
-        ` : (img.notes ? `<div style="padding:0 18px 18px;font-size:14px;color:var(--ink);line-height:1.65;white-space:pre-wrap">${escHtml(img.notes)}</div>` : '')
-
-        html += `
-          <div class="image-card" id="img-${img.id}">
-            <img src="${urlData.publicUrl}" alt="${img.caption || ''}" />
-            <div class="image-card-footer">${adminControls}</div>
-            ${notesBlock}
+      thumbList.innerHTML = allImages.map((img, i) => {
+        const { data: urlData } = supabaseClient.storage.from('illustrations').getPublicUrl(img.storage_path)
+        return `
+          <div class="thumb-item${i === 0 ? ' active' : ''}" id="thumb-${img.id}" onclick="selectImage(${i})">
+            <img src="${urlData.publicUrl}" alt="" />
+            <div class="thumb-item-num">${i + 1} of ${allImages.length}</div>
           </div>
         `
-      }
+      }).join('')
 
-      html += '</div>'
-      section.innerHTML = html
+      selectImage(0)
+    }
+
+    function selectImage(index) {
+      currentIndex = index
+      const img = allImages[index]
+
+      document.querySelectorAll('.thumb-item').forEach(el => el.classList.remove('active'))
+      document.getElementById(`thumb-${img.id}`)?.classList.add('active')
+
+      const { data: urlData } = supabaseClient.storage.from('illustrations').getPublicUrl(img.storage_path)
+
+      const adminControls = role === 'admin' ? `
+        <div style="display:flex;align-items:center;gap:8px;flex:1">
+          <input class="caption-edit-input" data-id="${img.id}" value="${escHtml(img.caption || '')}" placeholder="Add caption…" />
+          <button class="btn btn-secondary btn-save-title" onclick="saveImageMeta('${img.id}', this)" style="font-size:13px;padding:5px 12px">Save</button>
+          <button class="btn-delete" onclick="deleteImage('${img.id}')" title="Delete image">×</button>
+        </div>
+      ` : `<span class="image-caption">${escHtml(img.caption || '')}</span>`
+
+      const notesBlock = role === 'admin' ? `
+        <div style="padding:0 18px 16px">
+          <textarea data-notes-id="${img.id}" placeholder="Add a write-up about this illustration…" style="width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:4px;font-family:'Source Sans 3',sans-serif;font-size:14px;color:var(--ink);resize:vertical;min-height:90px;outline:none">${escHtml(img.notes || '')}</textarea>
+        </div>
+      ` : (img.notes ? `<div style="padding:0 18px 18px;font-size:14px;color:var(--ink);line-height:1.65;white-space:pre-wrap">${escHtml(img.notes)}</div>` : '')
+
+      const nav = `
+        <div style="display:flex;justify-content:space-between;margin-bottom:12px">
+          <button class="btn btn-ghost" onclick="selectImage(${index - 1})" ${index === 0 ? 'disabled style="opacity:0.3"' : ''}>← Previous</button>
+          <span style="font-size:13px;color:var(--ink-muted);align-self:center">${index + 1} / ${allImages.length}</span>
+          <button class="btn btn-ghost" onclick="selectImage(${index + 1})" ${index === allImages.length - 1 ? 'disabled style="opacity:0.3"' : ''}>Next →</button>
+        </div>
+      `
+
+      document.getElementById('main-image-area').innerHTML = `
+        ${nav}
+        <div class="main-image-wrap">
+          <img src="${urlData.publicUrl}" alt="${escHtml(img.caption || '')}" />
+          <div class="main-image-footer">${adminControls}</div>
+          ${notesBlock}
+        </div>
+      `
     }
 
     async function saveImageMeta(imageId, btn) {
       const caption = document.querySelector(`input[data-id="${imageId}"]`).value.trim()
-      const notes = document.querySelector(`textarea[data-id="${imageId}"]`).value.trim()
+      const notes = document.querySelector(`textarea[data-notes-id="${imageId}"]`).value.trim()
       btn.textContent = 'Saving…'
       btn.disabled = true
-      await supabaseClient.from('images').update({ caption, notes }).eq('id', imageId)
-      btn.textContent = 'Saved'
+      const { error } = await supabaseClient.from('images').update({ caption, notes }).eq('id', imageId)
+      if (!error) {
+        allImages[currentIndex].caption = caption
+        allImages[currentIndex].notes = notes
+      }
+      btn.textContent = error ? 'Error' : 'Saved'
       setTimeout(() => { btn.textContent = 'Save'; btn.disabled = false }, 1500)
     }
 
-    async function deleteImage(imageId, btn) {
+    async function deleteImage(imageId) {
       if (!confirm('Delete this image?')) return
-      const card = document.getElementById(`img-${imageId}`)
-      const { data: imgData } = await supabaseClient
-        .from('images').select('storage_path').eq('id', imageId).single()
+      const { data: imgData } = await supabaseClient.from('images').select('storage_path').eq('id', imageId).single()
       await supabaseClient.storage.from('illustrations').remove([imgData.storage_path])
       await supabaseClient.from('images').delete().eq('id', imageId)
-      card.remove()
+      allImages = allImages.filter(i => i.id !== imageId)
+      document.getElementById(`thumb-${imageId}`)?.remove()
+      if (allImages.length === 0) {
+        document.getElementById('main-image-area').innerHTML = '<div class="no-images-msg">No illustrations uploaded yet for this chapter.</div>'
+      } else {
+        selectImage(Math.min(currentIndex, allImages.length - 1))
+      }
     }
 
     async function loadComments() {
       const { data: comments } = await supabaseClient
-        .from('comments')
-        .select('*')
-        .eq('chapter_id', chapterId)
-        .order('created_at', { ascending: true })
+        .from('comments').select('*').eq('chapter_id', chapterId).order('created_at', { ascending: true })
 
       const authorName = role === 'admin' ? 'Illustrator' : 'Author'
 
@@ -147,8 +287,7 @@
         commentsHtml = '<p class="no-comments">No comments yet. Be the first to leave a note.</p>'
       } else {
         commentsHtml = comments.map(c => {
-          const date = new Date(c.created_at)
-          const timeStr = date.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
+          const timeStr = new Date(c.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
           return `
             <div class="comment">
               <div class="comment-header">
@@ -164,7 +303,7 @@
       document.getElementById('comments-section').innerHTML = `
         <div class="comments-section">
           <h2>Notes &amp; Comments</h2>
-          <div class="comment-list" id="comment-list">${commentsHtml}</div>
+          <div class="comment-list">${commentsHtml}</div>
           <div class="comment-form">
             <h3>Leave a note</h3>
             <div class="form-group">
@@ -186,16 +325,13 @@
       const author = document.getElementById('comment-author').value.trim()
       const body = document.getElementById('comment-body').value.trim()
       const errEl = document.getElementById('comment-error')
-
       if (!body) { errEl.classList.add('visible'); return }
       errEl.classList.remove('visible')
-
       const { error } = await supabaseClient.from('comments').insert({
         chapter_id: chapterId,
         author: author || 'Anonymous',
         body
       })
-
       if (!error) {
         document.getElementById('comment-body').value = ''
         await loadComments()
