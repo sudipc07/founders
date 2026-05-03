@@ -231,9 +231,9 @@
       ` : (img.notes ? `<div style="padding:0 18px 18px;font-size:14px;color:var(--ink);line-height:1.65;white-space:pre-wrap">${escHtml(img.notes)}</div>` : '')
 
       const nav = `
-        <div style="display:flex;justify-content:space-between;margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:20px">
           <button class="btn btn-ghost" onclick="selectImage(${index - 1})" ${index === 0 ? 'disabled style="opacity:0.3"' : ''}>← Previous</button>
-          <span style="font-size:13px;color:var(--ink-muted);align-self:center">${index + 1} / ${allImages.length}</span>
+          <span style="font-size:15px;color:var(--ink-muted);align-self:center">${index + 1} / ${allImages.length}</span>
           <button class="btn btn-ghost" onclick="selectImage(${index + 1})" ${index === allImages.length - 1 ? 'disabled style="opacity:0.3"' : ''}>Next →</button>
         </div>
       `
@@ -241,9 +241,11 @@
       document.getElementById('main-image-area').innerHTML = `
         ${nav}
         <div class="main-image-wrap">
-          <img src="${urlData.publicUrl}" alt="${escHtml(img.caption || '')}" />
-          <div class="main-image-footer">${adminControls}</div>
-          ${notesBlock}
+          <img src="${urlData.publicUrl}" alt="${escHtml(img.caption || '')}" style="max-height:340px;width:auto;max-width:100%;display:block;margin:0 auto;" />
+          <div style="padding:20px 24px 8px">
+            <div class="main-image-footer" style="padding:0;margin-bottom:${img.notes || role === 'admin' ? '16px' : '0'}">${adminControls}</div>
+            ${notesBlock}
+          </div>
         </div>
       `
     }
