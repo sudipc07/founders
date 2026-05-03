@@ -337,12 +337,16 @@
         commentsHtml = comments.map(c => {
           const timeStr = new Date(c.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
           return `
-            <div class="comment">
+            <div class="comment" id="comment-${c.id}">
               <div class="comment-header">
                 <span class="comment-author">${escHtml(c.author)}</span>
                 <span class="comment-time">${timeStr}</span>
+                <span style="margin-left:auto;display:flex;gap:8px">
+                  <button class="btn-ghost" style="font-size:13px;padding:2px 8px;border:1px solid var(--border);border-radius:4px;cursor:pointer;background:none" onclick="editComment('${c.id}', \`${escHtml(c.body)}\`)">Edit</button>
+                  <button class="btn-ghost" style="font-size:13px;padding:2px 8px;border:1px solid var(--border);border-radius:4px;cursor:pointer;background:none;color:#c0392b" onclick="deleteComment('${c.id}', '${chapterId}')">Delete</button>
+                </span>
               </div>
-              <div class="comment-body">${escHtml(c.body)}</div>
+              <div class="comment-body" id="comment-body-${c.id}">${escHtml(c.body)}</div>
             </div>
           `
         }).join('')
@@ -369,6 +373,37 @@
           </div>
         </div>
       `
+    }
+
+    async function deleteComment(commentId, chapterId) {
+      if (!confirm('Delete this comment?')) return
+      await supabaseClient.from('comments').delete().eq('id', commentId)
+      await loadComments(chapterId)
+    }
+
+    function editComment(commentId, currentBody) {
+      const bodyEl = document.getElementById(`comment-body-${commentId}`)
+      bodyEl.innerHTML = `
+        <textarea style="width:100%;padding:8px 12px;font-family:'Source Sans 3',sans-serif;font-size:18px;color:var(--ink);border:1px solid var(--border);border-radius:4px;background:var(--bg);resize:vertical;min-height:80px;outline:none;margin-top:6px">${currentBody}</textarea>
+        <div style="margin-top:8px;display:flex;gap:8px">
+          <button class="btn btn-primary" style="font-size:15px;padding:6px 16px" onclick="saveComment('${commentId}', this)">Save</button>
+          <button class="btn btn-secondary" style="font-size:15px;padding:6px 16px" onclick="cancelEdit('${commentId}', \`${currentBody}\`)">Cancel</button>
+        </div>
+      `
+    }
+
+    async function saveComment(commentId, btn) {
+      const textarea = document.querySelector(`#comment-body-${commentId} textarea`)
+      const body = textarea.value.trim()
+      if (!body) return
+      btn.textContent = 'Saving…'
+      btn.disabled = true
+      await supabaseClient.from('comments').update({ body }).eq('id', commentId)
+      document.getElementById(`comment-body-${commentId}`).innerHTML = escHtml(body)
+    }
+
+    function cancelEdit(commentId, originalBody) {
+      document.getElementById(`comment-body-${commentId}`).innerHTML = escHtml(originalBody)
     }
 
     async function submitComment(chapterId) {
