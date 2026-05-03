@@ -240,7 +240,7 @@ a:hover {
 
 .chapter-card-thumb {
   width: 100%;
-  aspect-ratio: 4/3;
+  aspect-ratio: 16/9;
   background: var(--bg);
   overflow: hidden;
   position: relative;
