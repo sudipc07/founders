@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chapters — Future Founders</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <nav class="nav">
+    <span class="nav-brand">Future Founders</span>
+    <div class="nav-actions">
+      <span id="admin-nav" style="display:none">
+        <a href="/admin.html" class="btn btn-secondary" style="font-size:13px">Admin Panel</a>
+      </span>
+      <button onclick="logout()" class="btn btn-ghost">Log out</button>
+    </div>
+  </nav>
+
+  <div class="container">
+    <div class="page-header">
+      <h1>Chapters</h1>
+      <p>Select a chapter to view illustrations and leave comments.</p>
+    </div>
+
+    <div id="chapters-grid" class="chapters-grid">
+      <div class="loading">Loading chapters…</div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="auth.js"></script>
+  <script src="supabase.js"></script>
+  <script>
+    const role = requireAuth()
+    if (role === 'admin') {
+      document.getElementById('admin-nav').style.display = 'inline'
+    }
+
+    async function loadChapters() {
+      const { data: chapters, error } = await supabaseClient
+        .from('chapters')
+        .select('*, images(id, storage_path)')
+        .order('number')
+
+      if (error) {
+        document.getElementById('chapters-grid').innerHTML =
+          '<p style="color:#c0392b">Failed to load chapters. Check Supabase setup.</p>'
+        return
+      }
+
+      const grid = document.getElementById('chapters-grid')
+      grid.innerHTML = ''
+
+      for (const ch of chapters) {
+        const firstImage = ch.images && ch.images[0]
+        let thumbHtml = `<div class="chapter-number-watermark">${ch.number}</div>`
+        if (firstImage) {
+          const { data: urlData } = supabaseClient.storage
+            .from('illustrations')
+            .getPublicUrl(firstImage.storage_path)
+          thumbHtml = `<img src="${urlData.publicUrl}" alt="" />`
+        }
+
+        const imageCount = ch.images ? ch.images.length : 0
+
+        const card = document.createElement('a')
+        card.href = `/chapter.html?id=${ch.id}`
+        card.className = 'chapter-card'
+        card.innerHTML = `
+          <div class="chapter-card-thumb">${thumbHtml}</div>
+          <div class="chapter-card-body">
+            <h3>${ch.title}</h3>
+            <div class="chapter-card-meta">
+              <span class="badge">${imageCount} image${imageCount !== 1 ? 's' : ''}</span>
+            </div>
+          </div>
+        `
+        grid.appendChild(card)
+      }
+    }
+
+    loadChapters()
+  </script>
+</body>
+</html>

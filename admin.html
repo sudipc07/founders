@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin — Future Founders</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <nav class="nav">
+    <span class="nav-brand">Future Founders</span>
+    <div class="nav-actions">
+      <a href="/chapters.html" class="btn btn-ghost">← Chapters</a>
+      <button onclick="logout()" class="btn btn-ghost">Log out</button>
+    </div>
+  </nav>
+
+  <div class="container">
+    <div class="page-header">
+      <h1>Admin Panel</h1>
+      <p>Upload illustrations and manage chapter content.</p>
+    </div>
+
+    <!-- Upload section -->
+    <div class="section-card">
+      <h2>Upload Illustration</h2>
+
+      <div class="form-group">
+        <label>Chapter</label>
+        <select id="upload-chapter"></select>
+      </div>
+
+      <div class="upload-zone" id="upload-zone">
+        <p>Drag &amp; drop an image here, or click to select</p>
+        <small style="color:var(--ink-muted);font-size:13px">JPG, PNG, WebP accepted</small>
+        <input type="file" id="file-input" accept="image/jpeg,image/png,image/webp" style="display:none" />
+        <div class="upload-preview" id="upload-preview"></div>
+      </div>
+
+      <div class="form-group">
+        <label>Caption <span style="font-weight:300;text-transform:none">(optional)</span></label>
+        <input type="text" id="upload-caption" placeholder="Describe this illustration…" />
+      </div>
+
+      <button class="btn btn-primary" id="upload-btn" onclick="uploadImage()">Upload</button>
+      <div class="progress-bar-wrap" id="progress-wrap">
+        <div class="progress-bar" id="progress-bar" style="width:0%"></div>
+      </div>
+      <p class="success-msg" id="upload-success">Image uploaded successfully!</p>
+      <p class="error-msg" id="upload-error">Upload failed. Please try again.</p>
+    </div>
+
+    <!-- Manage images for selected chapter -->
+    <div class="section-card">
+      <h2>Images in Selected Chapter</h2>
+      <div id="admin-image-list"><p style="color:var(--ink-muted);font-size:14px">Select a chapter above to see its images.</p></div>
+    </div>
+
+    <!-- Chapter title management -->
+    <div class="section-card">
+      <h2>Edit Chapter Titles</h2>
+      <div id="chapter-titles-list"><div class="loading">Loading…</div></div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="auth.js"></script>
+  <script src="supabase.js"></script>
+  <script>
+    requireAdmin()
+
+    let chapters = []
+    let selectedFile = null
+
+    async function init() {
+      const { data } = await supabaseClient.from('chapters').select('*').order('number')
+      chapters = data || []
+
+      const select = document.getElementById('upload-chapter')
+      select.innerHTML = chapters.map(ch =>
+        `<option value="${ch.id}" data-number="${ch.number}">${ch.title}</option>`
+      ).join('')
+
+      select.addEventListener('change', loadAdminImages)
+      loadAdminImages()
+      renderChapterTitles()
+    }
+
+    async function loadAdminImages() {
+      const chapterId = document.getElementById('upload-chapter').value
+      const { data: images } = await supabaseClient
+        .from('images')
+        .select('*')
+        .eq('chapter_id', chapterId)
+        .order('sort_order')
+
+      const container = document.getElementById('admin-image-list')
+
+      if (!images || images.length === 0) {
+        container.innerHTML = '<p style="color:var(--ink-muted);font-size:14px">No images uploaded for this chapter yet.</p>'
+        return
+      }
+
+      let html = '<div class="admin-image-list">'
+      for (const img of images) {
+        const { data: urlData } = supabaseClient.storage
+          .from('illustrations')
+          .getPublicUrl(img.storage_path)
+        html += `
+          <div class="admin-image-item" id="admin-img-${img.id}">
+            <img src="${urlData.publicUrl}" alt="" />
+            <div class="admin-image-item-footer">
+              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${img.caption || 'No caption'}</span>
+              <button class="btn-delete" onclick="deleteAdminImage('${img.id}', '${img.storage_path}')" title="Delete">×</button>
+            </div>
+          </div>
+        `
+      }
+      html += '</div>'
+      container.innerHTML = html
+    }
+
+    async function deleteAdminImage(imageId, storagePath) {
+      if (!confirm('Delete this image?')) return
+      await supabaseClient.storage.from('illustrations').remove([storagePath])
+      await supabaseClient.from('images').delete().eq('id', imageId)
+      document.getElementById(`admin-img-${imageId}`)?.remove()
+    }
+
+    // Drag and drop
+    const zone = document.getElementById('upload-zone')
+    const fileInput = document.getElementById('file-input')
+
+    zone.addEventListener('click', () => fileInput.click())
+    zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over') })
+    zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'))
+    zone.addEventListener('drop', e => {
+      e.preventDefault()
+      zone.classList.remove('drag-over')
+      const file = e.dataTransfer.files[0]
+      if (file) setFile(file)
+    })
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files[0]) setFile(fileInput.files[0])
+    })
+
+    function setFile(file) {
+      selectedFile = file
+      const reader = new FileReader()
+      reader.onload = e => {
+        document.getElementById('upload-preview').innerHTML =
+          `<img src="${e.target.result}" alt="Preview" />`
+      }
+      reader.readAsDataURL(file)
+    }
+
+    async function uploadImage() {
+      if (!selectedFile) {
+        showError('Please select an image first.')
+        return
+      }
+
+      const select = document.getElementById('upload-chapter')
+      const chapterId = select.value
+      const chapterNumber = select.options[select.selectedIndex].dataset.number
+      const caption = document.getElementById('upload-caption').value.trim()
+
+      const ext = selectedFile.name.split('.').pop()
+      const filename = `${Date.now()}.${ext}`
+      const storagePath = `chapter-${chapterNumber}/${filename}`
+
+      const btn = document.getElementById('upload-btn')
+      btn.disabled = true
+      btn.textContent = 'Uploading…'
+
+      const progressWrap = document.getElementById('progress-wrap')
+      const progressBar = document.getElementById('progress-bar')
+      progressWrap.classList.add('visible')
+      progressBar.style.width = '30%'
+
+      const { error: uploadError } = await supabaseClient.storage
+        .from('illustrations')
+        .upload(storagePath, selectedFile, { upsert: true })
+
+      progressBar.style.width = '70%'
+
+      if (uploadError) {
+        showError('Upload failed: ' + uploadError.message)
+        btn.disabled = false
+        btn.textContent = 'Upload'
+        progressWrap.classList.remove('visible')
+        return
+      }
+
+      const { error: dbError } = await supabaseClient.from('images').insert({
+        chapter_id: chapterId,
+        filename,
+        storage_path: storagePath,
+        caption: caption || null,
+        sort_order: Date.now()
+      })
+
+      progressBar.style.width = '100%'
+
+      if (dbError) {
+        showError('Image uploaded but failed to save record: ' + dbError.message)
+      } else {
+        document.getElementById('upload-success').classList.add('visible')
+        document.getElementById('upload-caption').value = ''
+        document.getElementById('upload-preview').innerHTML = ''
+        selectedFile = null
+        fileInput.value = ''
+        setTimeout(() => document.getElementById('upload-success').classList.remove('visible'), 3000)
+        loadAdminImages()
+      }
+
+      btn.disabled = false
+      btn.textContent = 'Upload'
+      setTimeout(() => {
+        progressWrap.classList.remove('visible')
+        progressBar.style.width = '0%'
+      }, 600)
+    }
+
+    function showError(msg) {
+      const el = document.getElementById('upload-error')
+      el.textContent = msg
+      el.classList.add('visible')
+      setTimeout(() => el.classList.remove('visible'), 4000)
+    }
+
+    function renderChapterTitles() {
+      const container = document.getElementById('chapter-titles-list')
+      container.innerHTML = chapters.map(ch => `
+        <div class="chapter-title-row">
+          <span class="num">${ch.number}</span>
+          <input type="text" id="title-${ch.id}" value="${ch.title}" />
+          <button class="btn btn-secondary btn-save-title" onclick="saveTitle('${ch.id}', this)">Save</button>
+        </div>
+      `).join('')
+    }
+
+    async function saveTitle(chapterId, btn) {
+      const input = document.getElementById(`title-${chapterId}`)
+      const title = input.value.trim()
+      if (!title) return
+      btn.textContent = 'Saving…'
+      btn.disabled = true
+      await supabaseClient.from('chapters').update({ title }).eq('id', chapterId)
+      btn.textContent = 'Saved'
+      setTimeout(() => { btn.textContent = 'Save'; btn.disabled = false }, 1500)
+    }
+
+    init()
+  </script>
+</body>
+</html>

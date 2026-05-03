@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chapter — Future Founders</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <nav class="nav">
+    <span class="nav-brand">Future Founders</span>
+    <div class="nav-actions">
+      <span id="admin-nav" style="display:none">
+        <a href="/admin.html" class="btn btn-secondary" style="font-size:13px">Admin Panel</a>
+      </span>
+      <button onclick="logout()" class="btn btn-ghost">Log out</button>
+    </div>
+  </nav>
+
+  <div class="container">
+    <a href="/chapters.html" class="back-link">← Back to chapters</a>
+
+    <div id="chapter-header">
+      <div class="loading">Loading…</div>
+    </div>
+
+    <div id="images-section"></div>
+    <div id="comments-section"></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="auth.js"></script>
+  <script src="supabase.js"></script>
+  <script>
+    const role = requireAuth()
+    if (role === 'admin') document.getElementById('admin-nav').style.display = 'inline'
+
+    const params = new URLSearchParams(window.location.search)
+    const chapterId = params.get('id')
+    if (!chapterId) window.location.href = '/chapters.html'
+
+    let chapterData = null
+
+    async function loadChapter() {
+      const { data: ch } = await supabaseClient
+        .from('chapters')
+        .select('*')
+        .eq('id', chapterId)
+        .single()
+
+      if (!ch) { window.location.href = '/chapters.html'; return }
+      chapterData = ch
+
+      document.title = `${ch.title} — Future Founders`
+      document.getElementById('chapter-header').innerHTML = `
+        <h1 class="chapter-title">${ch.title}</h1>
+        <p class="chapter-subtitle">Chapter ${ch.number}</p>
+      `
+
+      await loadImages()
+      await loadComments()
+    }
+
+    async function loadImages() {
+      const { data: images } = await supabaseClient
+        .from('images')
+        .select('*')
+        .eq('chapter_id', chapterId)
+        .order('sort_order')
+
+      const section = document.getElementById('images-section')
+
+      if (!images || images.length === 0) {
+        section.innerHTML = `
+          <h2 class="images-section" style="font-size:20px;margin-bottom:20px;padding-bottom:10px;border-bottom:1px solid var(--border)">Illustrations</h2>
+          <div class="no-images">No illustrations uploaded yet for this chapter.</div>
+        `
+        return
+      }
+
+      let html = `<div class="images-section"><h2 style="font-size:20px;margin-bottom:20px;padding-bottom:10px;border-bottom:1px solid var(--border)">Illustrations</h2>`
+
+      for (const img of images) {
+        const { data: urlData } = supabaseClient.storage
+          .from('illustrations')
+          .getPublicUrl(img.storage_path)
+
+        const adminControls = role === 'admin' ? `
+          <div style="display:flex;align-items:center;gap:8px;flex:1">
+            <input class="caption-edit-input" data-id="${img.id}" value="${img.caption || ''}" placeholder="Add caption…" />
+            <button class="btn btn-secondary btn-save-title" onclick="saveCaption('${img.id}', this)" style="font-size:13px;padding:5px 12px">Save</button>
+            <button class="btn-delete" onclick="deleteImage('${img.id}', this)" title="Delete image">×</button>
+          </div>
+        ` : `<span class="image-caption">${img.caption || ''}</span>`
+
+        html += `
+          <div class="image-card" id="img-${img.id}">
+            <img src="${urlData.publicUrl}" alt="${img.caption || ''}" />
+            <div class="image-card-footer">${adminControls}</div>
+          </div>
+        `
+      }
+
+      html += '</div>'
+      section.innerHTML = html
+    }
+
+    async function saveCaption(imageId, btn) {
+      const input = document.querySelector(`input[data-id="${imageId}"]`)
+      const caption = input.value.trim()
+      btn.textContent = 'Saving…'
+      btn.disabled = true
+      await supabaseClient.from('images').update({ caption }).eq('id', imageId)
+      btn.textContent = 'Saved'
+      setTimeout(() => { btn.textContent = 'Save'; btn.disabled = false }, 1500)
+    }
+
+    async function deleteImage(imageId, btn) {
+      if (!confirm('Delete this image?')) return
+      const card = document.getElementById(`img-${imageId}`)
+      const { data: imgData } = await supabaseClient
+        .from('images').select('storage_path').eq('id', imageId).single()
+      await supabaseClient.storage.from('illustrations').remove([imgData.storage_path])
+      await supabaseClient.from('images').delete().eq('id', imageId)
+      card.remove()
+    }
+
+    async function loadComments() {
+      const { data: comments } = await supabaseClient
+        .from('comments')
+        .select('*')
+        .eq('chapter_id', chapterId)
+        .order('created_at', { ascending: true })
+
+      const authorName = role === 'admin' ? 'Illustrator' : 'Author'
+
+      let commentsHtml = ''
+      if (!comments || comments.length === 0) {
+        commentsHtml = '<p class="no-comments">No comments yet. Be the first to leave a note.</p>'
+      } else {
+        commentsHtml = comments.map(c => {
+          const date = new Date(c.created_at)
+          const timeStr = date.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
+          return `
+            <div class="comment">
+              <div class="comment-header">
+                <span class="comment-author">${escHtml(c.author)}</span>
+                <span class="comment-time">${timeStr}</span>
+              </div>
+              <div class="comment-body">${escHtml(c.body)}</div>
+            </div>
+          `
+        }).join('')
+      }
+
+      document.getElementById('comments-section').innerHTML = `
+        <div class="comments-section">
+          <h2>Notes &amp; Comments</h2>
+          <div class="comment-list" id="comment-list">${commentsHtml}</div>
+          <div class="comment-form">
+            <h3>Leave a note</h3>
+            <div class="form-group">
+              <label>Your name</label>
+              <input type="text" id="comment-author" value="${authorName}" />
+            </div>
+            <div class="form-group">
+              <label>Comment</label>
+              <textarea id="comment-body" placeholder="Write your thoughts…"></textarea>
+            </div>
+            <button class="btn btn-primary" onclick="submitComment()">Post comment</button>
+            <p class="error-msg" id="comment-error">Please enter a comment.</p>
+          </div>
+        </div>
+      `
+    }
+
+    async function submitComment() {
+      const author = document.getElementById('comment-author').value.trim()
+      const body = document.getElementById('comment-body').value.trim()
+      const errEl = document.getElementById('comment-error')
+
+      if (!body) { errEl.classList.add('visible'); return }
+      errEl.classList.remove('visible')
+
+      const { error } = await supabaseClient.from('comments').insert({
+        chapter_id: chapterId,
+        author: author || 'Anonymous',
+        body
+      })
+
+      if (!error) {
+        document.getElementById('comment-body').value = ''
+        await loadComments()
+      }
+    }
+
+    function escHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+    }
+
+    loadChapter()
+  </script>
+</body>
+</html>
