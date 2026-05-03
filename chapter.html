@@ -89,15 +89,22 @@
         const adminControls = role === 'admin' ? `
           <div style="display:flex;align-items:center;gap:8px;flex:1">
             <input class="caption-edit-input" data-id="${img.id}" value="${img.caption || ''}" placeholder="Add caption…" />
-            <button class="btn btn-secondary btn-save-title" onclick="saveCaption('${img.id}', this)" style="font-size:13px;padding:5px 12px">Save</button>
+            <button class="btn btn-secondary btn-save-title" onclick="saveImageMeta('${img.id}', this)" style="font-size:13px;padding:5px 12px">Save</button>
             <button class="btn-delete" onclick="deleteImage('${img.id}', this)" title="Delete image">×</button>
           </div>
         ` : `<span class="image-caption">${img.caption || ''}</span>`
+
+        const notesBlock = role === 'admin' ? `
+          <div style="padding:0 18px 16px">
+            <textarea class="notes-edit-input" data-id="${img.id}" placeholder="Add a write-up about this illustration…" style="width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:4px;font-family:'Source Sans 3',sans-serif;font-size:14px;color:var(--ink);resize:vertical;min-height:90px;outline:none">${img.notes || ''}</textarea>
+          </div>
+        ` : (img.notes ? `<div style="padding:0 18px 18px;font-size:14px;color:var(--ink);line-height:1.65;white-space:pre-wrap">${escHtml(img.notes)}</div>` : '')
 
         html += `
           <div class="image-card" id="img-${img.id}">
             <img src="${urlData.publicUrl}" alt="${img.caption || ''}" />
             <div class="image-card-footer">${adminControls}</div>
+            ${notesBlock}
           </div>
         `
       }
@@ -106,12 +113,12 @@
       section.innerHTML = html
     }
 
-    async function saveCaption(imageId, btn) {
-      const input = document.querySelector(`input[data-id="${imageId}"]`)
-      const caption = input.value.trim()
+    async function saveImageMeta(imageId, btn) {
+      const caption = document.querySelector(`input[data-id="${imageId}"]`).value.trim()
+      const notes = document.querySelector(`textarea[data-id="${imageId}"]`).value.trim()
       btn.textContent = 'Saving…'
       btn.disabled = true
-      await supabaseClient.from('images').update({ caption }).eq('id', imageId)
+      await supabaseClient.from('images').update({ caption, notes }).eq('id', imageId)
       btn.textContent = 'Saved'
       setTimeout(() => { btn.textContent = 'Save'; btn.disabled = false }, 1500)
     }
