@@ -32,20 +32,25 @@
       font-size: 13px;
       font-weight: 600;
       color: var(--ink-muted);
-      padding: 6px 16px;
+      padding: 8px 16px;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: space-between;
       user-select: none;
-      transition: color 0.15s;
+      transition: color 0.15s, background 0.15s;
+      border-radius: 4px;
+    }
+
+    .sidebar-chapter-heading:hover {
+      background: var(--bg);
     }
 
     .sidebar-chapter-heading:hover { color: var(--ink); }
     .sidebar-chapter-heading.has-active { color: var(--accent); }
 
     .sidebar-chapter-arrow {
-      font-size: 10px;
+      font-size: 16px;
       transition: transform 0.2s;
     }
 
